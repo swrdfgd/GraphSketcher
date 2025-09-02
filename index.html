@@ -1,449 +1,749 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Graph Sketcher</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Graph Sketcher — Fixed Union & Live Color</title>
 <style>
-    /* Basic styling and layout */
-    body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }
-    #toolbar {
-        display: flex;
-        gap: 10px;
-        margin: 10px 0;
-    }
-    .mode-btn {
-        padding: 5px 15px;
-        cursor: pointer;
-        background-color: #f0f0f0;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-    }
-    .mode-btn.active {
-        background-color: #007bff;
-        color: white;
-    }
-    .graph-window {
-        position: absolute;
-        border: 1px solid #ccc;
-        background-color: white;
-        resize: both;
-        overflow: hidden;
-        width: 300px;
-        height: 300px;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-    }
-    .drag-bar {
-        height: 20px;
-        background-color: #ddd;
-        cursor: grab;
-        position: relative;
-    }
-    .close-btn {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 20px;
-        height: 20px;
-        background-color: #f44336;
-        color: white;
-        border: none;
-        font-weight: bold;
-        cursor: pointer;
-        border-radius: 0 4px 0 4px;
-    }
-    svg {
-        width: 100%;
-        height: calc(100% - 20px);
-    }
-    circle {
-        cursor: pointer;
-    }
-    .highlighted {
-        stroke: red;
-        stroke-width: 3;
-    }
+  body { margin:0; font-family:system-ui,Arial,sans-serif; background:linear-gradient(135deg,#6a11cb,#2575fc); color:#fff; display:flex; flex-direction:column; align-items:center; padding:12px; }
+  h2 { margin:6px 0 12px 0; }
+  #toolbar { display:flex; gap:8px; align-items:center; background:rgba(255,255,255,0.08); padding:8px; border-radius:8px; width:100%; max-width:1200px; box-sizing:border-box; }
+  .mode-btn, .action-btn { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; background:#f0f0f0; }
+  .mode-btn.active { background:#28a745; color:white; }
+  #graph-container { width:100%; max-width:1200px; height:calc(100vh - 420px); position:relative; margin-top:12px; }
+  .graph-window { position:absolute; width:420px; height:360px; background:white; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.35); overflow:hidden; resize:both; }
+  .drag-bar { height:36px; background:#333; color:white; display:flex; align-items:center; justify-content:space-between; padding:0 8px; cursor:grab; }
+  .window-left { display:flex; align-items:center; gap:8px; color: #fff; }
+  .window-left .id { font-size:11px; color:#ddd; }
+  .window-left .name { font-weight:600; color:#fff; }
+  .window-btns { display:flex; gap:6px; align-items:center; }
+  .small-btn { padding:6px 8px; border-radius:6px; border:none; cursor:pointer; }
+  .rename-btn { background:#ffc107; }
+  .save-btn { background:#4caf50; color:white; }
+  .close-btn { background:#f44336; color:white; }
+  svg { width:100%; height:calc(100% - 36px); display:block; background:transparent; }
+  /* important: don't set fill/stroke defaults that override inline style; styles below only for stroke/hover effects */
+  circle.vertex { stroke:white; stroke-width:1.5; cursor:pointer; }
+  line.edge { stroke-width:2; cursor:pointer; }
+  circle.vertex:hover, line.edge:hover { filter: drop-shadow(0 0 6px rgba(255,215,0,0.9)); }
+  .glow { filter: drop-shadow(0 0 10px rgba(0,255,255,0.9)); }
+  text.label { font-family:Arial, sans-serif; font-size:12px; fill:black; pointer-events:none; }
+  #union-controls { margin-top:10px; display:flex; gap:8px; align-items:center; }
+  #templates { margin-top:12px; width:100%; max-width:1200px; background:rgba(255,255,255,0.06); padding:10px; border-radius:8px; }
+  textarea { width:360px; height:110px; font-family:monospace; border-radius:6px; padding:6px; }
+  @media (max-width:900px){ #graph-container { height:calc(100vh - 620px); } }
 </style>
 </head>
 <body>
-
-<h2>Graph Sketcher</h2>
+<h2>Graph Sketcher — Fixed Union & Live Color</h2>
 
 <div id="toolbar">
+  <button class="action-btn" id="btnAddGraph">+ Add Graph Window</button>
+
+  <div style="display:inline-flex;gap:6px;">
     <button class="mode-btn" data-mode="vertex">Vertex</button>
     <button class="mode-btn" data-mode="connect">Connect</button>
     <button class="mode-btn" data-mode="move">Move</button>
     <button class="mode-btn" data-mode="remove">Remove</button>
     <button class="mode-btn" data-mode="label">Label</button>
-    <button onclick="createGraphWindow()">+ Add Graph Window</button>
+    <button class="mode-btn" data-mode="color">Color</button>
+  </div>
+
+  <div style="margin-left:12px; display:inline-flex; gap:6px; align-items:center;">
+    <input id="colorPicker" type="color" value="#ff5722" title="Pilih warna">
+    <button class="action-btn" onclick="colorAll('vertex')">Color All Vertices</button>
+    <button class="action-btn" onclick="colorAll('edge')">Color All Edges</button>
+  </div>
+
+  <div style="margin-left:auto;">
+    <button class="action-btn" onclick="saveAllGraphs()">💾 Save All</button>
+  </div>
+</div>
+
+<div id="union-controls">
+  <label style="color:white">Union:</label>
+  <select id="unionA"></select>
+  <select id="unionB"></select>
+  <button class="action-btn" onclick="unionGraphs()">🔗 Union</button>
+  <span id="union-feedback" style="color:#fff;margin-left:8px"></span>
+</div>
+
+<div id="templates">
+  <strong>Templates:</strong>
+  <button class="action-btn" onclick="addCycle()">Cycle(n)</button>
+  <button class="action-btn" onclick="addComplete()">Complete(n)</button>
+  <button class="action-btn" onclick="addPath()">Path(n)</button>
+  <span style="margin-left:12px">Custom adjacency matrix:</span>
+  <div style="margin-top:8px; display:flex; gap:10px; align-items:flex-start;">
+    <textarea id="adjMatrix" placeholder="Example 4-cycle:
+0 1 0 1
+1 0 1 0
+0 1 0 1
+1 0 1 0"></textarea>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="action-btn" onclick="addCustom()">Add Custom</button>
+      <div style="color:#fff;font-size:13px;max-width:300px">Matrix must be square, 0/1, symmetric, diagonal 0</div>
+    </div>
+  </div>
 </div>
 
 <div id="graph-container"></div>
 
 <script>
-    let currentMode = 'vertex';
-    let selectedVertex = null;
-    let selectedWindowID = null;
-    const graphDataPerWindow = {};
+/* ---------- State ---------- */
+let currentMode = 'vertex';
+let selectedVertex = null;
+let selectedWindowID = null;
+let graphCounter = 0;
+const graphDataPerWindow = {}; // id -> { id, name, nameSpan, svg, vertices:[], edges:[], labels:[] }
 
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentMode = btn.getAttribute('data-mode');
-            resetSelectedVertex();
-        });
+/* ---------- Helpers ---------- */
+function uid(){ return 'w' + Date.now().toString(36).slice(-6) + Math.random().toString(36).slice(2,6); }
+function randName(){ return "graph_" + Math.random().toString(36).slice(2,8) + ".png"; }
+function parseNum(v){ return parseFloat(v) || 0; }
+function setMode(m){
+  currentMode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  if(selectedVertex){ selectedVertex.classList.remove('glow'); selectedVertex = null; selectedWindowID = null; }
+}
+
+/* bind UI */
+document.getElementById('btnAddGraph').addEventListener('click', ()=> createGraphWindow());
+document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', ()=> setMode(b.dataset.mode)));
+setMode('vertex');
+
+/* ---------- Dropdown refresh ---------- */
+function refreshDropdowns(){
+  ['unionA','unionB'].forEach(id => {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    sel.innerHTML = '';
+    Object.values(graphDataPerWindow).forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.id;
+      o.textContent = d.name + " (" + d.id + ")";
+      sel.appendChild(o);
     });
+    if(prev) sel.value = prev;
+  });
+}
 
-    function resetSelectedVertex() {
-        if (selectedVertex) selectedVertex.classList.remove('highlighted');
-        selectedVertex = null;
-        selectedWindowID = null;
+/* ---------- Create Graph Window (optional name) ---------- */
+function createGraphWindow(customName){
+  graphCounter++;
+  const id = uid();
+  const win = document.createElement('div');
+  win.className = 'graph-window';
+  win.style.left = (60 + Math.random()*180) + 'px';
+  win.style.top  = (60 + Math.random()*120) + 'px';
+  win.dataset.id = id;
+
+  const drag = document.createElement('div'); drag.className = 'drag-bar';
+  const left = document.createElement('div'); left.className = 'window-left';
+  const idSpan = document.createElement('span'); idSpan.className = 'id'; idSpan.textContent = '['+id+']';
+  const nameSpan = document.createElement('span'); nameSpan.className = 'name';
+  nameSpan.textContent = customName ? customName : ('Graph ' + graphCounter);
+  left.appendChild(idSpan); left.appendChild(nameSpan);
+
+  const btnBox = document.createElement('div'); btnBox.className = 'window-btns';
+  const renameBtn = document.createElement('button'); renameBtn.className = 'small-btn rename-btn'; renameBtn.textContent = '✎';
+  const saveBtn = document.createElement('button'); saveBtn.className = 'small-btn save-btn'; saveBtn.textContent = '💾';
+  const closeBtn = document.createElement('button'); closeBtn.className = 'small-btn close-btn'; closeBtn.textContent = '✕';
+  btnBox.appendChild(renameBtn); btnBox.appendChild(saveBtn); btnBox.appendChild(closeBtn);
+
+  drag.appendChild(left); drag.appendChild(btnBox);
+
+  // SVG — give it an internal pixel canvas size which we'll scale when exporting
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  svg.setAttribute('width','800');
+  svg.setAttribute('height','600');
+  svg.innerHTML = '<g class="edges"></g><g class="vertices"></g><g class="labels"></g>';
+
+  win.appendChild(drag);
+  win.appendChild(svg);
+  document.getElementById('graph-container').appendChild(win);
+
+  // model
+  graphDataPerWindow[id] = { id, name: nameSpan.textContent, nameSpan, svg, vertices: [], edges: [], labels: [] };
+
+  // event wiring
+  svg.dataset.id = id;
+  svg.addEventListener('mousedown', (e) => handleMouseDown(e, svg));
+  renameBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const newName = prompt('Rename graph:', graphDataPerWindow[id].name);
+    if(newName !== null && newName !== '') {
+      graphDataPerWindow[id].name = newName;
+      nameSpan.textContent = newName;
+      refreshDropdowns();
     }
+  });
+  saveBtn.addEventListener('click', (ev) => { ev.stopPropagation(); saveGraphAsImage(win); });
+  closeBtn.addEventListener('click', (ev) => { ev.stopPropagation(); delete graphDataPerWindow[id]; win.remove(); refreshDropdowns(); });
 
-    function createGraphWindow() {
-        const graphWindow = document.createElement('div');
-        graphWindow.className = 'graph-window';
+  startDragWindow(drag, win);
+  refreshDropdowns();
+  return id;
+}
 
-        const dragBar = document.createElement('div');
-        dragBar.className = 'drag-bar';
+/* ---------- Drag window ---------- */
+function startDragWindow(handle, win){
+  handle.addEventListener('mousedown', (ev) => {
+    ev.preventDefault();
+    const ox = ev.clientX - win.offsetLeft;
+    const oy = ev.clientY - win.offsetTop;
+    function mv(e){ win.style.left = (e.clientX - ox) + 'px'; win.style.top = (e.clientY - oy) + 'px'; }
+    function up(){ document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
+    document.addEventListener('mousemove', mv);
+    document.addEventListener('mouseup', up);
+  });
+}
 
-        const closeButton = document.createElement('button');
-        closeButton.className = 'close-btn';
-        closeButton.innerText = '✕';
-        closeButton.onclick = () => graphWindow.remove();
+/* ---------- Save SVG -> PNG (export matches display) ---------- */
+function saveGraphAsImage(winEl){
+  const svg = winEl.querySelector('svg');
+  if(!svg) return;
+  // clone and set pixel size to match window's client size (excluding drag bar)
+  const cloned = svg.cloneNode(true);
+  const w = winEl.clientWidth;
+  const h = winEl.clientHeight - winEl.querySelector('.drag-bar').clientHeight;
+  cloned.setAttribute('width', String(w));
+  cloned.setAttribute('height', String(h));
 
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  // ensure a white background so exported image matches display
+  const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  bg.setAttribute('x','0'); bg.setAttribute('y','0'); bg.setAttribute('width', String(w)); bg.setAttribute('height', String(h));
+  bg.setAttribute('fill','white');
+  cloned.insertBefore(bg, cloned.firstChild);
 
-        dragBar.appendChild(closeButton);
-        graphWindow.appendChild(dragBar);
-        graphWindow.appendChild(svg);
-        svg.addEventListener('mousedown', (event) => handleSVGClick(event, svg));
+  // serialize
+  const s = new XMLSerializer().serializeToString(cloned);
+  const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white'; ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = randName(); a.click();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); alert('Export failed — coba browser lain'); };
+  img.src = url;
+}
 
-        dragBar.addEventListener('mousedown', (e) => startDragWindow(e, graphWindow));
+function saveAllGraphs(){
+  Object.values(graphDataPerWindow).forEach(d => {
+    const win = d.svg.closest('.graph-window');
+    if(win) saveGraphAsImage(win);
+  });
+}
 
-        document.getElementById('graph-container').appendChild(graphWindow);
+/* ---------- Core: modes handling ---------- */
+function handleMouseDown(ev, svg){
+  const id = svg.dataset.id;
+  const data = graphDataPerWindow[id];
+  if(!data) return;
+  const rect = svg.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = ev.clientY - rect.top;
 
-        const windowID = Date.now();
-        graphDataPerWindow[windowID] = { vertices: [], edges: [], labels: [] };
-        svg.dataset.windowID = windowID;
+  if(currentMode === 'vertex') {
+    addVertex(svg, x, y, data);
+  } else if(currentMode === 'connect') {
+    selectForConnect(svg, x, y, data);
+  } else if(currentMode === 'move') {
+    if(ev.target.tagName === 'circle') {
+      dragVertex(ev, ev.target, data);
+    } else if(ev.target.tagName === 'line') {
+      // dragging any edge moves whole graph
+      const edgeEl = ev.target;
+      dragEdge(ev, edgeEl, data);
+    } else {
+      // background drag (moves whole graph)
+      dragWholeGraph(ev, data);
     }
+  } else if(currentMode === 'remove') {
+    removeElement(svg, x, y, data);
+  } else if(currentMode === 'label') {
+    addLabel(svg, x, y, data);
+  } else if(currentMode === 'color') {
+    colorElement(svg, x, y);
+  }
+}
 
-    function startDragWindow(e, graphWindow) {
-        const offsetX = e.clientX - graphWindow.offsetLeft;
-        const offsetY = e.clientY - graphWindow.offsetTop;
+/* ---------- Vertex / Edge creation (always set inline styles + attributes) ---------- */
+function addVertex(svg, x, y, data, opts = {}){
+  const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c.classList.add('vertex');
+  const r = opts.r || 10;
+  const fill = opts.fill || '#1976d2';
+  c.setAttribute('cx', String(x));
+  c.setAttribute('cy', String(y));
+  c.setAttribute('r', String(r));
+  // set both presentation attribute and inline style to ensure exported/visual behavior
+  c.setAttribute('fill', fill);
+  c.style.fill = fill;
+  c.setAttribute('stroke', opts.stroke || 'white');
+  svg.querySelector('.vertices').appendChild(c);
+  data.vertices.push({ element: c, x, y, r, color: fill });
+}
 
-        const onMouseMove = (e) => {
-            graphWindow.style.left = `${e.clientX - offsetX}px`;
-            graphWindow.style.top = `${e.clientY - offsetY}px`;
-        };
+function createEdge(svg, startEl, endEl, data, opts = {}){
+  if(!startEl || !endEl || startEl === endEl) return;
+  // simple duplicate check (undirected)
+  if(data.edges.some(e => (e.start === startEl && e.end === endEl) || (e.start === endEl && e.end === startEl))) return;
+  const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+  l.classList.add('edge');
+  const stroke = opts.stroke || '#000';
+  const sw = opts.width || 2;
+  l.setAttribute('x1', startEl.getAttribute('cx'));
+  l.setAttribute('y1', startEl.getAttribute('cy'));
+  l.setAttribute('x2', endEl.getAttribute('cx'));
+  l.setAttribute('y2', endEl.getAttribute('cy'));
+  l.setAttribute('stroke', stroke);
+  l.setAttribute('stroke-width', String(sw));
+  l.style.stroke = stroke;
+  svg.querySelector('.edges').appendChild(l);
+  data.edges.push({ element: l, start: startEl, end: endEl, color: stroke, width: sw });
+}
 
-        const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
+/* ---------- Connect mode: select two vertices ---------- */
+function selectForConnect(svg, x, y, data){
+  const v = getNearestVertex(svg, x, y);
+  if(!v) return;
+  if(selectedVertex && selectedWindowID === svg.dataset.id && selectedVertex !== v){
+    createEdge(svg, selectedVertex, v, data);
+    selectedVertex.classList.remove('glow');
+    selectedVertex = null;
+    selectedWindowID = null;
+  } else {
+    if(selectedVertex) selectedVertex.classList.remove('glow');
+    selectedVertex = v;
+    selectedVertex.classList.add('glow');
+    selectedWindowID = svg.dataset.id;
+  }
+}
 
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+/* ---------- Coloring ---------- */
+function colorElement(svg, x, y){
+  const el = getNearestElement(svg, x, y);
+  if(!el) return;
+  const color = document.getElementById('colorPicker').value;
+  if(el.tagName === 'circle'){
+    el.setAttribute('fill', color);
+    el.style.fill = color;
+    // update model color
+    const data = graphDataPerWindow[svg.dataset.id];
+    const vobj = data.vertices.find(v => v.element === el);
+    if(vobj) vobj.color = color;
+  } else if(el.tagName === 'line'){
+    el.setAttribute('stroke', color);
+    el.style.stroke = color;
+    const data = graphDataPerWindow[svg.dataset.id];
+    const eobj = data.edges.find(e => e.element === el);
+    if(eobj) eobj.color = color;
+  }
+}
+
+function colorAll(type){
+  const color = document.getElementById('colorPicker').value;
+  Object.values(graphDataPerWindow).forEach(d => {
+    if(type === 'vertex'){
+      d.vertices.forEach(v => { v.element.setAttribute('fill', color); v.element.style.fill = color; v.color = color; });
+    } else if(type === 'edge'){
+      d.edges.forEach(e => { e.element.setAttribute('stroke', color); e.element.style.stroke = color; e.color = color; });
     }
+  });
+}
 
-    function handleSVGClick(event, svg) {
-        const rect = svg.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const windowID = svg.dataset.windowID;
-        const graphData = graphDataPerWindow[windowID];
-
-        if (currentMode === 'vertex') {
-            addVertex(svg, x, y, graphData);
-        } else if (currentMode === 'connect') {
-            selectVertexForConnection(svg, x, y, graphData, windowID);
-        } else if (currentMode === 'move') {
-            const target = event.target;
-            if (target.tagName !== 'circle') {
-                // Start dragging the entire graph if click is outside any vertex
-                startDragGraph(event, svg, graphData);
-            } else {
-                // Start dragging the specific vertex
-                moveElement(event, svg, graphData, windowID);
-            }
-        } else if (currentMode === 'remove') {
-            removeElement(svg, x, y, graphData);
-        } else if (currentMode === 'label') {
-            labelElement(svg, x, y, graphData);
-        }
+/* ---------- Label (overwrite existing) ---------- */
+function addLabel(svg, x, y, data){
+  const el = getNearestElement(svg, x, y);
+  if(!el) return;
+  const txt = prompt('Label:', (function(){
+    const existing = data.labels.find(lb => lb.vertex === el || lb.edge === el);
+    return existing ? existing.text.textContent : '';
+  })());
+  if(txt === null) return;
+  // remove previous label attached to this element
+  data.labels = data.labels.filter(lb => {
+    if((lb.vertex && lb.vertex === el) || (lb.edge && lb.edge === el)){
+      lb.text.parentNode && lb.text.parentNode.removeChild(lb.text);
+      return false;
     }
+    return true;
+  });
+  // create new label
+  const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.classList.add('label');
+  t.textContent = txt;
+  t.setAttribute('font-family','Arial');
+  t.setAttribute('font-size','12');
+  t.setAttribute('fill','black');
+  svg.querySelector('.labels').appendChild(t);
+  if(el.tagName === 'circle'){
+    t.setAttribute('x', el.getAttribute('cx'));
+    t.setAttribute('y', String(parseNum(el.getAttribute('cy')) - 15));
+    data.labels.push({ text: t, vertex: el });
+  } else {
+    const x1 = parseNum(el.getAttribute('x1')), y1 = parseNum(el.getAttribute('y1'));
+    const x2 = parseNum(el.getAttribute('x2')), y2 = parseNum(el.getAttribute('y2'));
+    t.setAttribute('x', String((x1 + x2) / 2));
+    t.setAttribute('y', String((y1 + y2) / 2));
+    data.labels.push({ text: t, edge: el });
+  }
+}
 
-    function addVertex(svg, x, y, graphData) {
-        const vertex = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        vertex.setAttribute('cx', x);
-        vertex.setAttribute('cy', y);
-        vertex.setAttribute('r', 10);
-        vertex.setAttribute('fill', 'blue');
-        vertex.classList.add('vertex');
-        //vertex.addEventListener('mousedown', (e) => startDragVertex(e, vertex, svg, graphData));
+/* ---------- Remove element + remove any labels connected ---------- */
+function removeElement(svg, x, y, data){
+  const el = getNearestElement(svg, x, y);
+  if(!el) return;
+  if(el.tagName === 'circle'){
+    // remove vertex element
+    el.parentNode && el.parentNode.removeChild(el);
+    data.vertices = data.vertices.filter(v => v.element !== el);
+    // remove edges touching it
+    const removedEdges = data.edges.filter(e => e.start === el || e.end === el);
+    removedEdges.forEach(e => { e.element.parentNode && e.element.parentNode.removeChild(e.element); });
+    data.edges = data.edges.filter(e => !(e.start === el || e.end === el));
+    // remove labels attached to this vertex or to removed edges
+    data.labels = data.labels.filter(lb => {
+      if(lb.vertex === el){ lb.text.parentNode && lb.text.parentNode.removeChild(lb.text); return false; }
+      if(lb.edge && removedEdges.some(re => re.element === lb.edge)){ lb.text.parentNode && lb.text.parentNode.removeChild(lb.text); return false; }
+      return true;
+    });
+  } else if(el.tagName === 'line'){
+    el.parentNode && el.parentNode.removeChild(el);
+    data.edges = data.edges.filter(e => e.element !== el);
+    data.labels = data.labels.filter(lb => {
+      if(lb.edge === el){ lb.text.parentNode && lb.text.parentNode.removeChild(lb.text); return false; }
+      return true;
+    });
+  }
+}
 
-        svg.appendChild(vertex);
-        graphData.vertices.push({ element: vertex, x, y });
+/* ---------- Drag single vertex (updates connected edges and labels) ---------- */
+function dragVertex(ev, vertexEl, data){
+  ev.preventDefault();
+  let prevX = ev.clientX, prevY = ev.clientY;
+  function onMove(e){
+    const dx = e.clientX - prevX; const dy = e.clientY - prevY;
+    prevX = e.clientX; prevY = e.clientY;
+    const nx = parseNum(vertexEl.getAttribute('cx')) + dx;
+    const ny = parseNum(vertexEl.getAttribute('cy')) + dy;
+    vertexEl.setAttribute('cx', String(nx));
+    vertexEl.setAttribute('cy', String(ny));
+    // update model
+    const vobj = data.vertices.find(v => v.element === vertexEl);
+    if(vobj){ vobj.x = nx; vobj.y = ny; }
+    // update connected edges
+    data.edges.forEach(ed => {
+      if(ed.start === vertexEl){ ed.element.setAttribute('x1', vertexEl.getAttribute('cx')); ed.element.setAttribute('y1', vertexEl.getAttribute('cy')); }
+      if(ed.end   === vertexEl){ ed.element.setAttribute('x2', vertexEl.getAttribute('cx')); ed.element.setAttribute('y2', vertexEl.getAttribute('cy')); }
+    });
+    // update labels
+    data.labels.forEach(lb => {
+      if(lb.vertex === vertexEl){
+        lb.text.setAttribute('x', vertexEl.getAttribute('cx'));
+        lb.text.setAttribute('y', String(parseNum(vertexEl.getAttribute('cy')) - 15));
+      } else if(lb.edge){
+        const x1 = parseNum(lb.edge.getAttribute('x1')), y1 = parseNum(lb.edge.getAttribute('y1'));
+        const x2 = parseNum(lb.edge.getAttribute('x2')), y2 = parseNum(lb.edge.getAttribute('y2'));
+        lb.text.setAttribute('x', String((x1 + x2) / 2));
+        lb.text.setAttribute('y', String((y1 + y2) / 2));
+      }
+    });
+  }
+  function onUp(){ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+/* ---------- Drag edge => move entire graph in that window ---------- */
+function dragEdge(ev, edgeEl, data){
+  ev.preventDefault();
+  let prevX = ev.clientX, prevY = ev.clientY;
+  function onMove(e){
+    const dx = e.clientX - prevX; const dy = e.clientY - prevY;
+    prevX = e.clientX; prevY = e.clientY;
+    // move all vertices by dx/dy
+    data.vertices.forEach(v => {
+      const nx = parseNum(v.element.getAttribute('cx')) + dx;
+      const ny = parseNum(v.element.getAttribute('cy')) + dy;
+      v.element.setAttribute('cx', String(nx));
+      v.element.setAttribute('cy', String(ny));
+      v.x = nx; v.y = ny;
+    });
+    // update all edges from vertex positions
+    data.edges.forEach(ed => {
+      ed.element.setAttribute('x1', ed.start.getAttribute('cx'));
+      ed.element.setAttribute('y1', ed.start.getAttribute('cy'));
+      ed.element.setAttribute('x2', ed.end.getAttribute('cx'));
+      ed.element.setAttribute('y2', ed.end.getAttribute('cy'));
+    });
+    // update labels
+    data.labels.forEach(lb => {
+      if(lb.vertex){
+        lb.text.setAttribute('x', lb.vertex.getAttribute('cx'));
+        lb.text.setAttribute('y', String(parseNum(lb.vertex.getAttribute('cy')) - 15));
+      } else if(lb.edge){
+        const x1 = parseNum(lb.edge.getAttribute('x1')), y1 = parseNum(lb.edge.getAttribute('y1'));
+        const x2 = parseNum(lb.edge.getAttribute('x2')), y2 = parseNum(lb.edge.getAttribute('y2'));
+        lb.text.setAttribute('x', String((x1 + x2) / 2));
+        lb.text.setAttribute('y', String((y1 + y2) / 2));
+      }
+    });
+  }
+  function onUp(){ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+/* ---------- Drag whole graph by background in Move mode ---------- */
+function dragWholeGraph(ev, data){
+  ev.preventDefault();
+  let prevX = ev.clientX, prevY = ev.clientY;
+  function onMove(e){
+    const dx = e.clientX - prevX; const dy = e.clientY - prevY;
+    prevX = e.clientX; prevY = e.clientY;
+    data.vertices.forEach(v => {
+      const nx = parseNum(v.element.getAttribute('cx')) + dx;
+      const ny = parseNum(v.element.getAttribute('cy')) + dy;
+      v.element.setAttribute('cx', String(nx));
+      v.element.setAttribute('cy', String(ny));
+      v.x = nx; v.y = ny;
+    });
+    data.edges.forEach(ed => {
+      ed.element.setAttribute('x1', ed.start.getAttribute('cx'));
+      ed.element.setAttribute('y1', ed.start.getAttribute('cy'));
+      ed.element.setAttribute('x2', ed.end.getAttribute('cx'));
+      ed.element.setAttribute('y2', ed.end.getAttribute('cy'));
+    });
+    data.labels.forEach(lb => {
+      if(lb.vertex){
+        lb.text.setAttribute('x', lb.vertex.getAttribute('cx'));
+        lb.text.setAttribute('y', String(parseNum(lb.vertex.getAttribute('cy')) - 15));
+      } else if(lb.edge){
+        const x1 = parseNum(lb.edge.getAttribute('x1')), y1 = parseNum(lb.edge.getAttribute('y1')),
+              x2 = parseNum(lb.edge.getAttribute('x2')), y2 = parseNum(lb.edge.getAttribute('y2'));
+        lb.text.setAttribute('x', String((x1 + x2) / 2));
+        lb.text.setAttribute('y', String((y1 + y2) / 2));
+      }
+    });
+  }
+  function onUp(){ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+/* ---------- Hit testing helpers ---------- */
+function getNearestVertex(svg, x, y){
+  const verts = Array.from(svg.querySelectorAll('circle.vertex'));
+  return verts.find(v => {
+    const dx = x - parseNum(v.getAttribute('cx')), dy = y - parseNum(v.getAttribute('cy'));
+    return Math.hypot(dx, dy) < 16;
+  });
+}
+function distancePointToSegment(px, py, x1, y1, x2, y2){
+  const l2 = (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1);
+  if(l2 === 0) return Math.hypot(px-x1, py-y1);
+  let t = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projx = x1 + t*(x2-x1);
+  const projy = y1 + t*(y2-y1);
+  return Math.hypot(px-projx, py-projy);
+}
+function getNearestElement(svg, x, y){
+  const v = getNearestVertex(svg, x, y);
+  if(v) return v;
+  const edges = Array.from(svg.querySelectorAll('line.edge'));
+  return edges.find(l => {
+    const x1 = parseNum(l.getAttribute('x1')), y1 = parseNum(l.getAttribute('y1'));
+    const x2 = parseNum(l.getAttribute('x2')), y2 = parseNum(l.getAttribute('y2'));
+    return distancePointToSegment(x, y, x1, y1, x2, y2) < 8;
+  });
+}
+
+/* ---------- Templates (create windows with template names) ---------- */
+function addCycle(){
+  const n = parseInt(prompt('Cycle graph: n vertices?', '5'));
+  if(!n || n < 3) return;
+  const id = createGraphWindow('Cycle(' + n + ')');
+  const d = graphDataPerWindow[id], svg = d.svg;
+  const cx = 200, cy = 180, r = Math.min(120, 30 + 8*n);
+  const verts = [];
+  for(let i=0;i<n;i++){
+    const ang = 2*Math.PI*i/n;
+    addVertex(svg, cx + r*Math.cos(ang), cy + r*Math.sin(ang), d);
+    verts.push(d.vertices[d.vertices.length-1].element);
+  }
+  for(let i=0;i<n;i++) createEdge(svg, verts[i], verts[(i+1)%n], d);
+}
+function addComplete(){
+  const n = parseInt(prompt('Complete graph: n vertices?', '5'));
+  if(!n || n < 1) return;
+  const id = createGraphWindow('Complete(' + n + ')');
+  const d = graphDataPerWindow[id], svg = d.svg;
+  const cx = 200, cy = 180, r = Math.min(120, 30 + 8*n);
+  const verts = [];
+  for(let i=0;i<n;i++){
+    const ang = 2*Math.PI*i/n;
+    addVertex(svg, cx + r*Math.cos(ang), cy + r*Math.sin(ang), d);
+    verts.push(d.vertices[d.vertices.length-1].element);
+  }
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) createEdge(svg, verts[i], verts[j], d);
+}
+function addPath(){
+  const n = parseInt(prompt('Path graph: n vertices?', '5'));
+  if(!n || n < 2) return;
+  const id = createGraphWindow('Path(' + n + ')');
+  const d = graphDataPerWindow[id], svg = d.svg;
+  const startX = 40, startY = 180, gap = Math.min(60, Math.max(30, 300 / n));
+  const verts = [];
+  for(let i=0;i<n;i++){
+    addVertex(svg, startX + i*gap, startY, d);
+    verts.push(d.vertices[d.vertices.length-1].element);
+  }
+  for(let i=0;i<n-1;i++) createEdge(svg, verts[i], verts[i+1], d);
+}
+function addCustom(){
+  const txt = document.getElementById('adjMatrix').value.trim();
+  if(!txt) { alert('Masukkan adjacency matrix'); return; }
+  const rows = txt.split(/\n/).map(r => r.trim()).filter(r => r.length>0).map(r => r.split(/\s+/).map(Number));
+  const n = rows.length;
+  if(!rows.every(r => r.length === n)){ alert('Matrix harus square'); return; }
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(rows[i][j] !== 0 && rows[i][j] !== 1){ alert('Hanya angka 0/1'); return; }
+  for(let i=0;i<n;i++) if(rows[i][i] !== 0){ alert('Diagonal harus 0'); return; }
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(rows[i][j] !== rows[j][i]){ alert('Matrix harus simetris (undirected)'); return; }
+  const id = createGraphWindow('Custom Graph');
+  const d = graphDataPerWindow[id], svg = d.svg;
+  const cx = 200, cy = 180, r = Math.min(120, 30 + 8*n);
+  for(let i=0;i<n;i++){
+    const ang = 2*Math.PI*i/n;
+    addVertex(svg, cx + r*Math.cos(ang), cy + r*Math.sin(ang), d);
+  }
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) if(rows[i][j] === 1) createEdge(svg, d.vertices[i].element, d.vertices[j].element, d);
+}
+
+/* ---------- Union function: copy two graphs into a new one (preserve colors & labels) ---------- */
+function unionGraphs(){
+  const id1 = document.getElementById('unionA').value;
+  const id2 = document.getElementById('unionB').value;
+  if(!id1 || !id2){ alert('Pilih dua window untuk union'); return; }
+  const g1 = graphDataPerWindow[id1];
+  const g2 = graphDataPerWindow[id2];
+  if(!g1 || !g2){ alert('Window invalid'); return; }
+
+  // create new window with name
+  const newId = createGraphWindow(`${g1.name} ∪ ${g2.name}`);
+  const nd = graphDataPerWindow[newId];
+  const svg = nd.svg;
+
+  // copy g1 vertices & labels
+  g1.vertices.forEach(v => addVertex(svg, v.x, v.y, nd, { fill: v.element.getAttribute('fill') || v.color || '#1976d2', r: parseNum(v.element.getAttribute('r') || 10) }));
+  g1.edges.forEach(e => {
+    const si = g1.vertices.findIndex(v => v.element === e.start);
+    const ti = g1.vertices.findIndex(v => v.element === e.end);
+    if(si >= 0 && ti >= 0) {
+      const sNew = nd.vertices[si].element;
+      const tNew = nd.vertices[ti].element;
+      createEdge(svg, sNew, tNew, nd, { stroke: e.element.getAttribute('stroke') || e.color || '#000', width: e.element.getAttribute('stroke-width') || e.width || 2 });
     }
-
-    function selectVertexForConnection(svg, x, y, graphData, windowID) {
-        const vertex = getNearestVertex(svg, x, y);
-        if (vertex) {
-            if (selectedVertex && selectedWindowID === windowID) {
-                createEdge(svg, selectedVertex, vertex, graphData);
-                resetSelectedVertex();
-            } else {
-                resetSelectedVertex();
-                selectedVertex = vertex;
-                selectedWindowID = windowID;
-                selectedVertex.classList.add('highlighted');
-            }
-        }
+  });
+  // labels for g1
+  g1.labels.forEach(lb => {
+    if(lb.vertex){
+      const i = g1.vertices.findIndex(v => v.element === lb.vertex);
+      if(i>=0){
+        const vnew = nd.vertices[i].element;
+        // create label
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.classList.add('label'); t.textContent = lb.text.textContent;
+        t.setAttribute('font-family','Arial'); t.setAttribute('font-size','12'); t.setAttribute('fill', lb.text.getAttribute('fill') || 'black');
+        svg.querySelector('.labels').appendChild(t);
+        t.setAttribute('x', vnew.getAttribute('cx')); t.setAttribute('y', String(parseNum(vnew.getAttribute('cy')) - 15));
+        nd.labels.push({ text: t, vertex: vnew });
+      }
+    } else if(lb.edge){
+      // find edge index by endpoints
+      const ei = g1.edges.findIndex(e => e.element === lb.edge);
+      if(ei >= 0){
+        const eNew = nd.edges[ei].element;
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.classList.add('label'); t.textContent = lb.text.textContent;
+        t.setAttribute('font-family','Arial'); t.setAttribute('font-size','12'); t.setAttribute('fill', lb.text.getAttribute('fill') || 'black');
+        svg.querySelector('.labels').appendChild(t);
+        const x1 = parseNum(eNew.getAttribute('x1')), y1 = parseNum(eNew.getAttribute('y1'));
+        const x2 = parseNum(eNew.getAttribute('x2')), y2 = parseNum(eNew.getAttribute('y2'));
+        t.setAttribute('x', String((x1 + x2) / 2)); t.setAttribute('y', String((y1 + y2) / 2));
+        nd.labels.push({ text: t, edge: eNew });
+      }
     }
+  });
 
-    function createEdge(svg, startVertex, endVertex, graphData) {
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', startVertex.getAttribute('cx'));
-        line.setAttribute('y1', startVertex.getAttribute('cy'));
-        line.setAttribute('x2', endVertex.getAttribute('cx'));
-        line.setAttribute('y2', endVertex.getAttribute('cy'));
-        line.setAttribute('stroke', 'black');
-        line.classList.add('edge');
-
-        svg.appendChild(line);
-        graphData.edges.push({ element: line, start: startVertex, end: endVertex });
+  // copy g2 shifted to right; shift so not overlap
+  const shift = 260;
+  const offset = nd.vertices.length;
+  g2.vertices.forEach(v => addVertex(svg, v.x + shift, v.y, nd, { fill: v.element.getAttribute('fill') || v.color || '#1976d2', r: parseNum(v.element.getAttribute('r') || 10) }));
+  g2.edges.forEach(e => {
+    const si = g2.vertices.findIndex(v => v.element === e.start);
+    const ti = g2.vertices.findIndex(v => v.element === e.end);
+    if(si >= 0 && ti >= 0){
+      const sNew = nd.vertices[offset + si].element;
+      const tNew = nd.vertices[offset + ti].element;
+      createEdge(svg, sNew, tNew, nd, { stroke: e.element.getAttribute('stroke') || e.color || '#000', width: e.element.getAttribute('stroke-width') || e.width || 2 });
     }
-
-    function moveElement(event, svg, graphData, windowID) {
-        const target = event.target;
-
-        if (target.tagName === 'circle') {
-            startDragVertex(event, target, svg, graphData);
-        }
+  });
+  // labels for g2 (shifted)
+  g2.labels.forEach(lb => {
+    if(lb.vertex){
+      const i = g2.vertices.findIndex(v => v.element === lb.vertex);
+      if(i>=0){
+        const vnew = nd.vertices[offset + i].element;
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.classList.add('label'); t.textContent = lb.text.textContent;
+        t.setAttribute('font-family','Arial'); t.setAttribute('font-size','12'); t.setAttribute('fill', lb.text.getAttribute('fill') || 'black');
+        svg.querySelector('.labels').appendChild(t);
+        t.setAttribute('x', vnew.getAttribute('cx')); t.setAttribute('y', String(parseNum(vnew.getAttribute('cy')) - 15));
+        nd.labels.push({ text: t, vertex: vnew });
+      }
+    } else if(lb.edge){
+      const ei = g2.edges.findIndex(e => e.element === lb.edge);
+      if(ei >= 0){
+        const eNew = nd.edges[offset + ei].element;
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.classList.add('label'); t.textContent = lb.text.textContent;
+        t.setAttribute('font-family','Arial'); t.setAttribute('font-size','12'); t.setAttribute('fill', lb.text.getAttribute('fill') || 'black');
+        svg.querySelector('.labels').appendChild(t);
+        const x1 = parseNum(eNew.getAttribute('x1')), y1 = parseNum(eNew.getAttribute('y1'));
+        const x2 = parseNum(eNew.getAttribute('x2')), y2 = parseNum(eNew.getAttribute('y2'));
+        t.setAttribute('x', String((x1 + x2) / 2)); t.setAttribute('y', String((y1 + y2) / 2));
+        nd.labels.push({ text: t, edge: eNew });
+      }
     }
+  });
 
-    function startDragVertex(event, vertex, svg, graphData) {
-        let startX = event.clientX;
-        let startY = event.clientY;
+  refreshDropdowns();
+  document.getElementById('union-feedback').textContent = `Union created: ${g1.name} ∪ ${g2.name}`;
+}
 
-        const onMouseMove = (e) => {
-			const scaleFactor = 1; // Adjust this to control speed
-            const dx = (e.clientX - startX)*scaleFactor;
-            const dy = (e.clientY - startY)*scaleFactor;
-            startX = e.clientX;
-            startY = e.clientY;
+/* ---------- Utility: initial dropdown & default window ---------- */
+refreshDropdowns();
+createGraphWindow(); // one default to start
 
-            const newX = parseFloat(vertex.getAttribute('cx')) + dx;
-            const newY = parseFloat(vertex.getAttribute('cy')) + dy;
-
-            vertex.setAttribute('cx', newX);
-            vertex.setAttribute('cy', newY);
-
-            updateEdgesAndLabels(vertex, graphData);
-        };
-
-        const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    }
-
-    function startDragGraph(event, svg, graphData) {
-        let startX = event.clientX;
-        let startY = event.clientY;
-
-        const onMouseMove = (e) => {
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            startX = e.clientX;
-            startY = e.clientY;
-
-            // Move all vertices
-            graphData.vertices.forEach(vertex => {
-                const newX = parseFloat(vertex.element.getAttribute('cx')) + dx;
-                const newY = parseFloat(vertex.element.getAttribute('cy')) + dy;
-                vertex.element.setAttribute('cx', newX);
-                vertex.element.setAttribute('cy', newY);
-                vertex.x = newX;
-                vertex.y = newY;
-            });
-
-            // Update edges connected to vertices
-            graphData.edges.forEach(edge => {
-                const start = graphData.vertices.find(v => v.element === edge.start);
-                const end = graphData.vertices.find(v => v.element === edge.end);
-                edge.element.setAttribute('x1', start.x);
-                edge.element.setAttribute('y1', start.y);
-                edge.element.setAttribute('x2', end.x);
-                edge.element.setAttribute('y2', end.y);
-            });
-
-            // Move all labels along with the vertices or edges they are attached to
-            graphData.labels.forEach(label => {
-                if (label.vertex) {
-                    label.text.setAttribute('x', label.vertex.getAttribute('cx'));
-                    label.text.setAttribute('y', label.vertex.getAttribute('cy') - 15);
-                } else if (label.edge) {
-                    const x1 = parseFloat(label.edge.getAttribute('x1'));
-                    const y1 = parseFloat(label.edge.getAttribute('y1'));
-                    const x2 = parseFloat(label.edge.getAttribute('x2'));
-                    const y2 = parseFloat(label.edge.getAttribute('y2'));
-                    label.text.setAttribute('x', (x1 + x2) / 2);
-                    label.text.setAttribute('y', (y1 + y2) / 2);
-                }
-            });
-        };
-
-        const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    }
-
-    function updateEdgesAndLabels(vertex, graphData) {
-        graphData.edges.forEach(edge => {
-            if (edge.start === vertex) {
-                edge.element.setAttribute('x1', vertex.getAttribute('cx'));
-                edge.element.setAttribute('y1', vertex.getAttribute('cy'));
-            } else if (edge.end === vertex) {
-                edge.element.setAttribute('x2', vertex.getAttribute('cx'));
-                edge.element.setAttribute('y2', vertex.getAttribute('cy'));
-            }
-        });
-
-        graphData.labels.forEach(label => {
-            if (label.vertex === vertex) {
-                label.text.setAttribute('x', vertex.getAttribute('cx'));
-                label.text.setAttribute('y', vertex.getAttribute('cy') - 15);
-            } else if (label.edge) {
-                const x1 = parseFloat(label.edge.getAttribute('x1'));
-                const y1 = parseFloat(label.edge.getAttribute('y1'));
-                const x2 = parseFloat(label.edge.getAttribute('x2'));
-                const y2 = parseFloat(label.edge.getAttribute('y2'));
-                label.text.setAttribute('x', (x1 + x2) / 2);
-                label.text.setAttribute('y', (y1 + y2) / 2);
-            }
-        });
-    }
-
-    function labelElement(svg, x, y, graphData) {
-        const element = getNearestElement(svg, x, y);
-        if (!element) return;
-
-        const labelText = prompt('Enter label:');
-        if (labelText) {
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.textContent = labelText;
-            svg.appendChild(text);
-
-            if (element.tagName === 'circle') {
-                const vertex = element;
-                text.setAttribute('x', vertex.getAttribute('cx'));
-                text.setAttribute('y', vertex.getAttribute('cy') - 15);
-                graphData.labels.push({ text, vertex });
-            } else if (element.tagName === 'line') {
-                const edge = element;
-                const x1 = parseFloat(edge.getAttribute('x1'));
-                const y1 = parseFloat(edge.getAttribute('y1'));
-                const x2 = parseFloat(edge.getAttribute('x2'));
-                const y2 = parseFloat(edge.getAttribute('y2'));
-                text.setAttribute('x', (x1 + x2) / 2);
-                text.setAttribute('y', (y1 + y2) / 2);
-                graphData.labels.push({ text, edge });
-            }
-        }
-    }
-
-    function getNearestVertex(svg, x, y) {
-        return [...svg.querySelectorAll('.vertex')].find(vertex => {
-            const dx = x - vertex.getAttribute('cx');
-            const dy = y - vertex.getAttribute('cy');
-            return Math.sqrt(dx * dx + dy * dy) < 20;
-        });
-    }
-
-    function getNearestElement(svg, x, y) {
-        return [...svg.querySelectorAll('.vertex, .edge')].find(el => {
-            const cx = el.tagName === 'circle' ? el.getAttribute('cx') : (parseFloat(el.getAttribute('x1')) + parseFloat(el.getAttribute('x2'))) / 2;
-            const cy = el.tagName === 'circle' ? el.getAttribute('cy') : (parseFloat(el.getAttribute('y1')) + parseFloat(el.getAttribute('y2'))) / 2;
-            const hitboxThreshold = 25;
-            return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) < hitboxThreshold;
-        });
-    }
-	
-	function removeElement(svg, x, y, graphData) {
-		const element = getNearestElement(svg, x, y);
-		if (!element) return;
-
-		if (element.tagName === 'circle') {
-			const vertex = element;
-			
-			// Hapus label yang terkait dengan vertex atau edge yang berhubungan
-			graphData.labels = graphData.labels.filter(label => {
-				if (label.vertex === vertex) {
-					svg.removeChild(label.text);
-					return false;
-				}
-				return true;
-			});
-
-			// Hapus semua edges yang terhubung ke vertex ini
-			graphData.edges = graphData.edges.filter(edge => {
-				if (edge.start === vertex || edge.end === vertex) {
-					// Hapus label yang terkait dengan edge
-					graphData.labels = graphData.labels.filter(label => {
-						if (label.edge === edge.element) {
-							svg.removeChild(label.text);
-							return false;
-						}
-						return true;
-					});
-					
-					svg.removeChild(edge.element);
-					return false;
-				}
-				return true;
-			});
-
-			// Akhirnya, hapus vertex
-			graphData.vertices = graphData.vertices.filter(v => v.element !== vertex);
-			svg.removeChild(vertex);
-
-		} else if (element.tagName === 'line') {
-			const edge = graphData.edges.find(e => e.element === element);
-			
-			if (edge) {
-				// Hapus label yang terkait dengan edge
-				graphData.labels = graphData.labels.filter(label => {
-					if (label.edge === element) {
-						svg.removeChild(label.text);
-						return false;
-					}
-					return true;
-				});
-
-				// Hapus edge dari svg dan graphData
-				svg.removeChild(edge.element);
-				graphData.edges = graphData.edges.filter(e => e !== edge);
-			}
-		}
-	}
-
-
+/* ---------- Expose some functions to template buttons ---------- */
+window.addCycle = addCycle;
+window.addComplete = addComplete;
+window.addPath = addPath;
+window.addCustom = addCustom;
+window.unionGraphs = unionGraphs;
+window.saveAllGraphs = saveAllGraphs;
+window.colorAll = colorAll;
 
 </script>
-
 </body>
 </html>
